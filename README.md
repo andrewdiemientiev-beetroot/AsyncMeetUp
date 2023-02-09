@@ -2,6 +2,12 @@
 The Application serves as middleware service between queue with data about status of lights in apartment and time 
 when metric was taken. 
 
+To start project:
+ - Create virtual environment
+ - Install requirements with `pip install requirements.txt`
+ - Run redis
+ - Run graphite
+
 # Requirements
  - Python >3.10
  - Docker
