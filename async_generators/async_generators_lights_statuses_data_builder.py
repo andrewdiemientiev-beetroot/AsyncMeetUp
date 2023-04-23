@@ -4,14 +4,14 @@ import time
 from typing import Tuple, Optional
 from abc import ABC
 import logging
-import concurrent.futures
-import functools
-from timeit import timeit
 
 import aioredis
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
+
+REDIS_QUEUE_NAME = 'list_home'
+GRAPHITE_METRIC_NAME = 'local.home.async_gen'
 
 
 class StatsAPI(ABC):
@@ -83,11 +83,8 @@ class RedisQueueAPI(QueueAPI):
 
     async def get_light_statuses(self, queue_name: str):
         log.info('Getting all records from queue')
-        loop = asyncio.get_running_loop()
-        results = [task async for task in self.consumer(queue_name)]
-        with concurrent.futures.ProcessPoolExecutor() as pool:
-            for message in results:
-                yield await loop.run_in_executor(pool, functools.partial(self._reformat_message, message))
+        async for message in self.consumer(queue_name):
+            yield self._reformat_message(message)
 
     @classmethod
     def _reformat_message(cls, message: str) -> Tuple:
@@ -108,9 +105,9 @@ async def main():
     queue = RedisQueueAPI()
     stats = GraphiteStatsAPI()
     gauge_tasks = []
-    async for time_of_change, status in queue.get_light_statuses('list_home'):
+    async for time_of_change, status in queue.get_light_statuses(REDIS_QUEUE_NAME):
         gauge_tasks.append(
-            asyncio.create_task(stats.gauge('local.home.async_gen', int(time_of_change.timestamp()), int(status)))
+            asyncio.create_task(stats.gauge(GRAPHITE_METRIC_NAME, int(time_of_change.timestamp()), int(status)))
         )
     await asyncio.gather(*gauge_tasks)
 

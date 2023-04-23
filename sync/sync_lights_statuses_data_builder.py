@@ -10,6 +10,9 @@ import redis
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
+REDIS_QUEUE_NAME = 'map_sync_home'
+GRAPHITE_METRIC_NAME = 'local.home.sync'
+
 
 class StatsAPI(ABC):
     """
@@ -45,14 +48,22 @@ class GraphiteStatsAPI(StatsAPI):
 
     # Blocking IO
     def _send_to_graphite(self, message: str):
+        time.sleep(0.05)
         sock = socket.socket()
         sock.connect((self.GRAPHITE_HOST, self.GRAPHITE_PORT))
-        sock.sendall(message.encode())
+        sock.send(message.encode())
         sock.close()
 
     def bulk_gauge(self, data: List[Tuple]):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.connect((self.GRAPHITE_HOST, self.GRAPHITE_PORT))
         for event_time, status in data:
-            self.gauge('local.home.sync', int(event_time.timestamp()), int(status))
+            event_time = int(event_time.timestamp())
+            key = 'local.home.sync'
+            value = int(status)
+            message = f"{key} {value} {event_time}\n"
+            sock.sendall(message.encode())
+        sock.close()
 
 
 class RedisQueueAPI(QueueAPI):
@@ -75,7 +86,7 @@ class RedisQueueAPI(QueueAPI):
     # Blocking IO
     def get_messages(self, queue_name: str) -> dict:
         messages = self.client.hgetall(queue_name)
-        self.client.flushall(asynchronous=True)
+        self.client.flushall()
         return messages
 
     # CPU bound operation
@@ -100,7 +111,8 @@ def main():
     queue = RedisQueueAPI()
     stats = GraphiteStatsAPI()
 
-    light_status_events = queue.get_light_statuses('map_sync_home')
+    light_status_events = queue.get_light_statuses(REDIS_QUEUE_NAME)
+    print(f"Number of data: {len(light_status_events)}")
     send_data_to_graphite(stats, light_status_events)
 
 

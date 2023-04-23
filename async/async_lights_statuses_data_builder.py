@@ -12,6 +12,9 @@ import aioredis
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
 
+REDIS_QUEUE_NAME = 'map_async_home'
+GRAPHITE_METRIC_NAME = 'local.home.async'
+
 
 class StatsAPI(ABC):
     """
@@ -57,7 +60,7 @@ class GraphiteStatsAPI(StatsAPI):
 
     async def gauge(self, key: str, lights_status_change_time: int, value: int):
         message = f"{key} {value} {lights_status_change_time}\n"
-
+        await asyncio.sleep(0.05)
         await self.init_connection()
         self.writer.write(message.encode())
         await self.writer.drain()
@@ -66,11 +69,15 @@ class GraphiteStatsAPI(StatsAPI):
 
     async def bulk_gauge(self, data):
         gauge_tasks = []
+        messages = []
         for time_of_change, status in data:
-            gauge_tasks.append(
-                asyncio.create_task(self.gauge('local.home.async', int(time_of_change.timestamp()), int(status)))
+            messages.append(
+                await self.gauge(GRAPHITE_METRIC_NAME, int(time_of_change.timestamp()), int(status))
             )
-        messages = await asyncio.gather(*gauge_tasks)
+        #     gauge_tasks.append(
+        #         asyncio.create_task(self.gauge(GRAPHITE_METRIC_NAME, int(time_of_change.timestamp()), int(status)))
+        #     )
+        # messages = await asyncio.gather(*gauge_tasks)
         return messages
 
 
@@ -126,7 +133,7 @@ class RedisQueueAPI(QueueAPI):
 async def main():
     queue = RedisQueueAPI()
     stats = GraphiteStatsAPI()
-    light_status_events = await queue.get_light_statuses('map_async_home')
+    light_status_events = await queue.get_light_statuses(REDIS_QUEUE_NAME)
     await stats.bulk_gauge(light_status_events)
 
 if __name__ == "__main__":

@@ -9,13 +9,12 @@ import aioredis
 def generate_mock_data():
     lights_status = True
     lights_statuses = dict()
-    year = 2018
+    year = 2022
     for month in range(1, 13):
         _, days = calendar.monthrange(year, month)
         for day in range(1, days):
             for hour in range(0, 24):
-                minutes = random.randint(0, 59)
-                lights_status_change_datetime = str(datetime(year, month, day, hour, minutes, 0))
+                lights_status_change_datetime = str(datetime(year, month, day, hour, 0, 0))
                 lights_statuses[lights_status_change_datetime] = int(lights_status)
                 lights_status = not lights_status
     return lights_statuses
